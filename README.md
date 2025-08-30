@@ -4,7 +4,7 @@ A modern, responsive portfolio management dashboard built with **Next.js 15**, *
 
 ## 🚀 Live Demo
 
-- **Local Development**: `http://localhost:3000`
+- **Local Development**: `https://dynamic-portfolio-dashboar.netlify.app/`
 - **GitHub Repository**: [Dynamic-Portfolio-Dashboard](https://github.com/sarthak2443/Dynamic-Portfolio-Dashboard)
 
 ## ✨ Features
@@ -343,3 +343,4 @@ This project is open source and available under the [MIT License](LICENSE).
 ---
 
 **Built with ❤️ for modern portfolio management**
+
