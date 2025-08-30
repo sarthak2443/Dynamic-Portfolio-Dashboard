@@ -1,0 +1,26 @@
+[
+  {
+    "name": "INFOSYS",
+    "symbol": "INFY",
+    "purchasePrice": 1400,
+    "qty": 10,
+    "exchange": "NSE",
+    "sector": "Technology"
+  },
+  {
+    "name": "TCS",
+    "symbol": "TCS",
+    "purchasePrice": 3500,
+    "qty": 2,
+    "exchange": "NSE",
+    "sector": "Technology"
+  },
+  {
+    "name": "HDFC BANK",
+    "symbol": "HDFCBANK",
+    "purchasePrice": 1600,
+    "qty": 5,
+    "exchange": "NSE",
+    "sector": "Financials"
+  }
+]
