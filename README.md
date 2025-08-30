@@ -321,13 +321,7 @@ This project is open source and available under the [MIT License](LICENSE).
 ## 📸 Screenshots
 
 ### Desktop View
-![Desktop Dashboard](screenshots/desktop-dashboard.png)
-
-### Mobile View
-![Mobile Dashboard](screenshots/mobile-dashboard.png)
-
-### Features Showcase
-![Features](screenshots/features-showcase.png)
+<img width="1600" height="810" alt="image" src="https://github.com/user-attachments/assets/f53fcdda-15ca-459a-a5de-559496b04b65" />
 
 ---
 
@@ -342,6 +336,7 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ---
 
-**Built with ❤️ for modern portfolio management**
+**Built with ❤️Sarthak for modern portfolio management**
+
 
 
