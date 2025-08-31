@@ -23,33 +23,63 @@ export default function PortfolioTable() {
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
-  // 🔹 Simulate API data fetching with realistic updates
+    // 🔹 Fetch real stock data from APIs
   useEffect(() => {
-    const fetchData = () => {
-      const updated = stocks.map((s) => {
-        const volatility = 0.02; // 2% volatility
-        const randomChange = (Math.random() - 0.5) * volatility;
-        const newCmp = s.cmp ? s.cmp * (1 + randomChange) : s.purchasePrice * (1 + randomChange + 0.1);
-        
-        return {
-          ...s,
-          cmp: Math.max(newCmp, s.purchasePrice * 0.5), // Prevent unrealistic drops
-          presentValue: Math.max(newCmp, s.purchasePrice * 0.5) * s.qty,
-          gainLoss: (Math.max(newCmp, s.purchasePrice * 0.5) * s.qty) - (s.purchasePrice * s.qty),
-          peRatio: (Math.random() * 40 + 10).toFixed(2),
-          earnings: (Math.random() * 100 + 20).toFixed(2),
-        };
-      });
-      setStocks(updated);
-      setLastUpdated(new Date());
-      setIsLoading(false);
+    const fetchData = async () => {
+      try {
+        const updated = await Promise.all(
+          stocks.map(async (s) => {
+            try {
+              // Fetch CMP from Yahoo Finance API
+              const cmpRes = await fetch(`/api/stock/cmp?symbol=${s.symbol}.NS`);
+              const cmpData = await cmpRes.json();
+              
+              // Fetch P/E ratio and earnings from scraping API
+              const detailsRes = await fetch(`/api/stock/details?symbol=${s.symbol}:NSE`);
+              const detailsData = await detailsRes.json();
+
+              const cmp = cmpData.cmp || s.purchasePrice; // fallback to purchase price
+              const presentValue = cmp * s.qty;
+              const gainLoss = presentValue - (s.purchasePrice * s.qty);
+
+              return {
+                ...s,
+                cmp,
+                presentValue,
+                gainLoss,
+                peRatio: detailsData.peRatio || "-",
+                earnings: detailsData.earnings || "-",
+              };
+            } catch (error) {
+              console.error(`Failed to fetch data for ${s.symbol}:`, error);
+              // Fallback to original purchase price if API fails
+              const presentValue = s.purchasePrice * s.qty;
+              return {
+                ...s,
+                cmp: s.purchasePrice,
+                presentValue,
+                gainLoss: 0,
+                peRatio: "-",
+                earnings: "-",
+              };
+            }
+          })
+        );
+
+        setStocks(updated);
+        setLastUpdated(new Date());
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Failed to fetch stock data:", error);
+        setIsLoading(false);
+      }
     };
 
     // Initial load
     fetchData();
     
-    // Auto-refresh every 15 seconds
-    const interval = setInterval(fetchData, 15000);
+    // Auto-refresh every 30 seconds (reduced frequency for API calls)
+    const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
 
