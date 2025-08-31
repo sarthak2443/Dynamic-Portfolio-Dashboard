@@ -8,134 +8,166 @@ export async function GET(req: Request) {
 
   try {
     const url = `https://www.google.com/finance/quote/${symbol}`;
-    console.log(`Fetching Google Finance: ${url}`);
+    console.log(`Testing Google Finance: ${url}`);
+    console.log(`Environment: ${process.env.NODE_ENV}`);
 
     const { data } = await axios.get(url, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
         "Accept-Encoding": "gzip, deflate, br",
         "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Upgrade-Insecure-Requests": "1",
       },
+      timeout: 15000,
     });
 
+    console.log(`Response length: ${data.length}`);
     const $ = cheerio.load(data);
 
+    // Check if we got blocked
+    const title = $('title').text();
+    console.log(`Page title: ${title}`);
+    
+    if (title.includes('Error') || title.includes('Access Denied') || data.length < 5000) {
+      console.log('Possible blocking detected');
+      return NextResponse.json({
+        error: "Access might be blocked",
+        title,
+        dataLength: data.length,
+        environment: process.env.NODE_ENV
+      });
+    }
+
+    // Get all text content to see what's available
+    const allDivs = $('div').map((i, el) => $(el).text()).get();
+    const financialData = allDivs.filter(text =>
+      text.includes('P/E') ||
+      text.includes('EPS') ||
+      text.includes('Earnings') ||
+      text.includes('ratio') ||
+      text.toLowerCase().includes('pe ')
+    );
+
+    // Enhanced P/E ratio extraction
     let extractedPE = "";
     let extractedEPS = "";
 
-    // Strategy 1: Original selector approach
-    $("div.gyFHrc").each((i, el) => {
-      const label = $(el).find(".mfs7Fc").text().trim();
-      const value = $(el).find(".P6K39c").text().trim();
-
-      if (label.includes("P/E") || label.includes("PE")) {
+    // Method 1: Look for data attributes (Google Finance specific)
+    $('[data-last-value]').each((i, elem) => {
+      const $elem = $(elem);
+      const parentText = $elem.parent().text();
+      const value = $elem.attr('data-last-value') || $elem.text();
+      
+      if (parentText && parentText.toLowerCase().includes('p/e') && !extractedPE) {
         extractedPE = value;
-      }
-      if (label.includes("EPS")) {
-        extractedEPS = value;
+        console.log(`Found P/E via data-last-value: ${extractedPE}`);
       }
     });
 
-    // Strategy 2: Alternative selectors if first strategy fails
-    if (!extractedPE || !extractedEPS) {
-      // Try different container selectors
-      $("div[data-test-id]").each((i, el) => {
-        const text = $(el).text();
-        if (text.includes("P/E") && !extractedPE) {
-          const match = text.match(/P\/E.*?(\d+\.?\d*)/);
-          if (match) extractedPE = match[1];
-        }
-        if (text.includes("EPS") && !extractedEPS) {
-          const match = text.match(/EPS.*?(\d+\.?\d*)/);
-          if (match) extractedEPS = match[1];
-        }
-      });
-    }
-
-    // Strategy 3: Look for statistics section
-    if (!extractedPE || !extractedEPS) {
-      $("div").each((i, el) => {
-        const $el = $(el);
-        const text = $el.text();
-        
-        // Look for P/E ratio patterns
-        if ((text.includes("P/E") || text.includes("PE ratio")) && !extractedPE) {
-          const nextDiv = $el.next();
-          const value = nextDiv.text().trim();
-          if (value && /^\d+\.?\d*$/.test(value)) {
-            extractedPE = value;
-          }
-        }
-        
-        // Look for EPS patterns
-        if (text.includes("EPS") && !extractedEPS) {
-          const nextDiv = $el.next();
-          const value = nextDiv.text().trim();
-          if (value && /^\d+\.?\d*$/.test(value)) {
-            extractedEPS = value;
-          }
-        }
-      });
-    }
-
-    // Strategy 4: Search for specific data attributes or classes
+    // Method 2: Look for P/E ratio patterns in the filtered data
     if (!extractedPE) {
-      const peElements = $("[data-symbol], .pe-ratio, [class*='pe'], [class*='PE']");
-      peElements.each((i, el) => {
-        const text = $(el).text();
-        const match = text.match(/(\d+\.?\d*)/);
-        if (match && text.toLowerCase().includes('p/e')) {
-          extractedPE = match[1];
-          return false; // break
+      financialData.forEach(text => {
+        // Enhanced patterns
+        const pePatterns = [
+          /P\/E\s*ratio\s*[:\-]?\s*(\d+\.?\d*)/gi,
+          /P\/E\s*[:\-]?\s*(\d+\.?\d*)/gi,
+          /PE\s*ratio\s*[:\-]?\s*(\d+\.?\d*)/gi,
+        ];
+
+        for (const pattern of pePatterns) {
+          const peMatch = text.match(pattern);
+          if (peMatch && peMatch[1] && !extractedPE) {
+            extractedPE = peMatch[1];
+            console.log(`Found P/E via pattern: ${extractedPE}`);
+            break;
+          }
+        }
+
+        // Look for EPS patterns
+        const epsMatch = text.match(/(?:EPS|Earnings per share)\s*(\d+\.?\d*)/i);
+        if (epsMatch && !extractedEPS) {
+          extractedEPS = epsMatch[1];
         }
       });
     }
 
-    if (!extractedEPS) {
-      const epsElements = $("[class*='eps'], [class*='EPS']");
-      epsElements.each((i, el) => {
-        const text = $(el).text();
-        const match = text.match(/(\d+\.?\d*)/);
-        if (match && text.toLowerCase().includes('eps')) {
-          extractedEPS = match[1];
-          return false; // break
+    // Method 3: Enhanced DOM structure search
+    if (!extractedPE) {
+      $('div').each((i, elem) => {
+        const $elem = $(elem);
+        const text = $elem.text().trim();
+
+        if (text.toLowerCase().includes('p/e') && text.toLowerCase().includes('ratio')) {
+          // Look for a number in the same element
+          const numberMatch = text.match(/(\d+\.?\d+)/);
+          if (numberMatch && !extractedPE) {
+            extractedPE = numberMatch[1];
+            console.log(`Found P/E in same element: ${extractedPE}`);
+            return false;
+          }
+
+          // Check next siblings for numeric values
+          let $next = $elem.next();
+          let attempts = 0;
+          while ($next.length && attempts < 3) {
+            const nextText = $next.text().trim();
+            const nextNumberMatch = nextText.match(/^(\d+\.?\d+)$/);
+            if (nextNumberMatch && parseFloat(nextNumberMatch[1]) > 0 && parseFloat(nextNumberMatch[1]) < 1000) {
+              extractedPE = nextNumberMatch[1];
+              console.log(`Found P/E via next sibling: ${extractedPE}`);
+              return false;
+            }
+            $next = $next.next();
+            attempts++;
+          }
         }
       });
     }
 
-    // Log the HTML structure for debugging (remove in production)
-    console.log('Available divs with gyFHrc class:', $("div.gyFHrc").length);
-    console.log('Sample content:', $("div.gyFHrc").first().html());
+    // Method 4: Look in tables or structured data
+    if (!extractedPE) {
+      $('table tr, div[role="row"]').each((i, elem) => {
+        const $row = $(elem);
+        const rowText = $row.text().toLowerCase();
+        
+        if (rowText.includes('p/e') || rowText.includes('pe ratio')) {
+          const cells = $row.find('td, div').map((j, cell) => $(cell).text().trim()).get();
+          for (const cell of cells) {
+            const numberMatch = cell.match(/^(\d+\.?\d+)$/);
+            if (numberMatch && parseFloat(numberMatch[1]) > 0 && parseFloat(numberMatch[1]) < 1000) {
+              extractedPE = numberMatch[1];
+              console.log(`Found P/E in table: ${extractedPE}`);
+              return false;
+            }
+          }
+        }
+      });
+    }
 
     return NextResponse.json({
       symbol,
       url,
+      financialData: financialData.slice(0, 10), // Limit for debugging
       extractedPE: extractedPE || "N/A",
       extractedEPS: extractedEPS || "N/A",
-      title: $("title").text(),
-      debug: {
-        totalDivs: $("div.gyFHrc").length,
-        sampleLabels: $("div.gyFHrc .mfs7Fc").map((i, el) => $(el).text().trim()).get(),
-        sampleValues: $("div.gyFHrc .P6K39c").map((i, el) => $(el).text().trim()).get(),
-      }
+      htmlLength: data.length,
+      title,
+      totalDivs: allDivs.length,
+      financialDataCount: financialData.length,
+      environment: process.env.NODE_ENV,
+      success: !!extractedPE,
     });
   } catch (error) {
-    if (error instanceof Error) {
-      console.error("Scraping error:", error.message);
-      return NextResponse.json(
-        { error: "Failed to fetch data", details: error.message },
-        { status: 500 }
-      );
-    } else {
-      console.error("Unexpected error:", error);
-      return NextResponse.json(
-        { error: "Failed to fetch data", details: String(error) },
-        { status: 500 }
-      );
-    }
+    console.error("Test error details:", error);
+    return NextResponse.json({
+      error: "Failed to fetch test data",
+      details: error instanceof Error ? error.message : String(error),
+      environment: process.env.NODE_ENV
+    }, { status: 500 });
   }
 }
